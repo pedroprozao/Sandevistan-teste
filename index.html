@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Sandevistan 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#050b17;font-family:Arial;color:white}
+canvas{display:block}
+#menu{position:fixed;inset:0;background:#061322ee;display:grid;place-items:center;text-align:center;z-index:5}
+.panel{padding:25px}
+h1{color:#52eaff;letter-spacing:4px}
+button{background:#063d55;color:white;border:2px solid #4deaff;border-radius:12px;padding:15px;font-weight:bold}
+#hud{position:fixed;top:12px;left:12px;pointer-events:none}
+#bar{height:9px;width:140px;background:#123;border:1px solid cyan}
+#energy{height:100%;width:100%;background:cyan}
+#stick{position:fixed;bottom:20px;left:20px;width:115px;height:115px;border:2px solid #5ceaff88;border-radius:50%;background:#1238;touch-action:none}
+#knob{width:43px;height:43px;border-radius:50%;background:#6df3ff;position:absolute;left:34px;top:34px}
+#slow{position:fixed;bottom:30px;right:20px;width:85px;height:85px;border-radius:50%}
+#dash{position:fixed;bottom:125px;right:30px;width:65px;height:65px;border-radius:50%}
+</style>
+</head>
+<body>
+<div id="hud">
+<b>SANDEVISTAN 3D</b>
+<p id="status">IMPLANTE: PRONTO</p>
+<div id="bar"><div id="energy"></div></div>
+</div>
+
+<div id="menu">
+<div class="panel">
+<h1>SANDEVISTAN</h1>
+<p>Entre na arena e controle o tempo!</p>
+<button id="start">INICIAR JOGO</button>
+</div>
+</div>
+
+<div id="stick"><div id="knob"></div></div>
+<button id="slow">SLOW</button>
+<button id="dash">DASH</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x06101e);
+scene.fog=new THREE.Fog(0x06101e,15,65);
+
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+document.body.prepend(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x8defff,0x101020,2));
+
+const light=new THREE.PointLight(0x00ccff,80,35);
+light.position.set(0,8,0);
+scene.add(light);
+
+const floor=new THREE.Mesh(
+new THREE.PlaneGeometry(100,100),
+new THREE.MeshStandardMaterial({color:0x101d30})
+);
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
+
+const grid=new THREE.GridHelper(100,50,0x00bfff,0x183b54);
+scene.add(grid);
+
+const player=new THREE.Group();
+scene.add(player);
+
+const body=new THREE.Mesh(
+new THREE.CapsuleGeometry(.5,1,4,8),
+new THREE.MeshStandardMaterial({color:0x147caa,emissive:0x003344})
+);
+body.position.y=1;
+player.add(body);
+
+const head=new THREE.Mesh(
+new THREE.SphereGeometry(.3,16,16),
+new THREE.MeshStandardMaterial({color:0x8df5ff,emissive:0x007799})
+);
+head.position.y=1.85;
+player.add(head);
+
+const enemies=[];
+for(let i=0;i<5;i++){
+const enemy=new THREE.Mesh(
+new THREE.OctahedronGeometry(.65),
+new THREE.MeshStandardMaterial({color:0xff2677,emissive:0x771133})
+);
+const a=i*Math.PI*2/5;
+enemy.position.set(Math.cos(a)*12,1,Math.sin(a)*12);
+scene.add(enemy);
+enemies.push(enemy);
+}
+
+let energy=100,active=false,playing=false;
+let joyX=0,joyY=0,dashing=0;
+const keys={};
+
+document.addEventListener('keydown',e=>{
+keys[e.code]=true;
+if(e.code==='KeyF')toggleSlow();
+if(e.code==='Space')dashing=.2;
+});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+
+function toggleSlow(){
+if(!playing)return;
+if(active)active=false;
+else if(energy>=25)active=true;
+}
+
+document.getElementById('slow').onclick=toggleSlow;
+document.getElementById('dash').onclick=()=>dashing=.2;
+
+const stick=document.getElementById('stick');
+const knob=document.getElementById('knob');
+
+stick.onpointerdown=e=>{stick.setPointerCapture(e.pointerId);moveJoy(e)};
+stick.onpointermove=e=>{if(e.buttons)moveJoy(e)};
+function moveJoy(e){
+const r=stick.getBoundingClientRect();
+let x=e.clientX-r.left-57;
+let y=e.clientY-r.top-57;
+const l=Math.hypot(x,y);
+if(l>40){x=x/l*40;y=y/l*40}
+joyX=x/40;joyY=y/40;
+knob.style.transform=`translate(${x}px,${y}px)`;
+}
+stick.onpointerup=()=>{joyX=0;joyY=0;knob.style.transform='none'};
+
+document.getElementById('start').onclick=()=>{
+playing=true;
+document.getElementById('menu').style.display='none';
+};
+
+let last=performance.now();
+function animate(t){
+requestAnimationFrame(animate);
+let dt=Math.min((t-last)/1000,.04);
+last=t;
+
+if(playing){
+if(active){
+energy-=25*dt;
+if(energy<=0){energy=0;active=false}
+}else energy=Math.min(100,energy+12*dt);
+
+let x=(keys.KeyD?1:0)-(keys.KeyA?1:0)+joyX;
+let z=(keys.KeyS?1:0)-(keys.KeyW?1:0)+joyY;
+let len=Math.hypot(x,z)||1;
+let speed=keys.ShiftLeft?11:7;
+
+if(dashing>0){
+player.position.z-=22*dt;
+dashing-=dt;
+}else{
+player.position.x+=x/len*speed*dt;
+player.position.z+=z/len*speed*dt;
+}
+
+player.position.x=THREE.MathUtils.clamp(player.position.x,-20,20);
+player.position.z=THREE.MathUtils.clamp(player.position.z,-20,20);
+
+let factor=active?.15:1;
+enemies.forEach((e,i)=>{
+let dx=player.position.x-e.position.x;
+let dz=player.position.z-e.position.z;
+let dist=Math.hypot(dx,dz)||1;
+if(dist>1.5){
+e.position.x+=dx/dist*2*factor*dt;
+e.position.z+=dz/dist*2*factor*dt;
+}
+e.rotation.y+=dt*factor*2;
+e.position.y=1+Math.sin(t*.002+i)*.2;
+});
+
+camera.position.lerp(
+new THREE.Vector3(player.position.x,6,player.position.z+10),.08
+);
+camera.lookAt(player.position.x,1,player.position.z);
+
+document.getElementById('energy').style.width=energy+'%';
+document.getElementById('status').textContent=
+active?'IMPLANTE: ATIVO':'IMPLANTE: PRONTO';
+scene.fog.color.setHex(active?0x063047:0x06101e);
+}
+
+renderer.render(scene,camera);
+}
+animate(performance.now());
+
+window.addEventListener('resize',()=>{
+camera.aspect=innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
